@@ -1,0 +1,318 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy import stats
+
+# Assuming netflix_df is already loaded from Step 1
+# If running separately, uncomment and run Step 1 first
+# exec(open('step1_data_setup.py').read())
+
+print("="*70)
+print("STEP 3: SUMMARY STATISTICS AND INSIGHTS")
+print("="*70)
+
+def generate_summary_statistics(df):
+    """Generate comprehensive summary statistics and insights"""
+    
+    print("📊 GENERATING COMPREHENSIVE SUMMARY STATISTICS...")
+    
+    print("\n" + "="*50)
+    print("1. DESCRIPTIVE STATISTICS - NUMERICAL VARIABLES")
+    print("="*50)
+    
+    # Numerical summary statistics
+    numerical_cols = df.select_dtypes(include=[np.number]).columns
+    summary_stats = df[numerical_cols].describe()
+    
+    print(summary_stats.round(2))
+    
+    # Additional statistics
+    print("\n📈 ADDITIONAL STATISTICAL MEASURES:")
+    print("-" * 50)
+    
+    additional_stats = pd.DataFrame({
+        'Skewness': df[numerical_cols].skew(),
+        'Kurtosis': df[numerical_cols].kurtosis(),
+        'Variance': df[numerical_cols].var(),
+        'Std_Dev': df[numerical_cols].std(),
+        'Range': df[numerical_cols].max() - df[numerical_cols].min(),
+        'IQR': df[numerical_cols].quantile(0.75) - df[numerical_cols].quantile(0.25)
+    }).round(3)
+    
+    print(additional_stats)
+    
+    print("\n" + "="*50)
+    print("2. CATEGORICAL VARIABLES SUMMARY")
+    print("="*50)
+    
+    categorical_cols = df.select_dtypes(include=['object']).columns
+    
+    for col in categorical_cols:
+        print(f"\n📋 {col.upper()}:")
+        print("-" * 30)
+        value_counts = df[col].value_counts()
+        percentages = (value_counts / len(df) * 100).round(1)
+        
+        summary_df = pd.DataFrame({
+            'Count': value_counts,
+            'Percentage': percentages
+        })
+        print(summary_df.head(10))  # Show top 10
+        print(f"Total unique values: {df[col].nunique()}")
+    
+    print("\n" + "="*50)
+    print("3. CORRELATION ANALYSIS")
+    print("="*50)
+    
+    # Correlation matrix
+    correlation_matrix = df[numerical_cols].corr()
+    print("Correlation Matrix:")
+    print(correlation_matrix.round(3))
+    
+    # Find strongest correlations
+    print("\n🔗 STRONGEST CORRELATIONS:")
+    print("-" * 30)
+    
+    # Get upper triangle of correlation matrix
+    mask = np.triu(np.ones_like(correlation_matrix, dtype=bool))
+    correlation_matrix_masked = correlation_matrix.mask(mask)
+    
+    # Find correlations above 0.3 or below -0.3
+    strong_correlations = []
+    for i in range(len(correlation_matrix_masked.columns)):
+        for j in range(len(correlation_matrix_masked.columns)):
+            corr_val = correlation_matrix_masked.iloc[i, j]
+            if pd.notna(corr_val) and abs(corr_val) > 0.3:
+                strong_correlations.append({
+                    'Variable_1': correlation_matrix_masked.columns[i],
+                    'Variable_2': correlation_matrix_masked.columns[j],
+                    'Correlation': corr_val
+                })
+    
+    if strong_correlations:
+        corr_df = pd.DataFrame(strong_correlations)
+        corr_df = corr_df.sort_values('Correlation', key=abs, ascending=False)
+        print(corr_df.round(3))
+    else:
+        print("No strong correlations (>0.3 or <-0.3) found")
+    
+    print("\n" + "="*50)
+    print("4. KEY INSIGHTS FROM RATINGS")
+    print("="*50)
+    
+    # IMDb Rating insights
+    ratings = df['IMDb_Rating'].dropna()
+    
+    print(f"🎬 IMDb RATING ANALYSIS:")
+    print(f"   Average Rating: {ratings.mean():.2f}")
+    print(f"   Median Rating: {ratings.median():.2f}")
+    print(f"   Highest Rating: {ratings.max():.2f}")
+    print(f"   Lowest Rating: {ratings.min():.2f}")
+    print(f"   Standard Deviation: {ratings.std():.2f}")
+    
+    # Rating distribution
+    print(f"\n📊 RATING DISTRIBUTION:")
+    rating_bins = pd.cut(ratings, bins=[0, 5, 6, 7, 8, 10], labels=['Poor (≤5)', 'Fair (5-6)', 'Good (6-7)', 'Great (7-8)', 'Excellent (8+)'])
+    rating_dist = rating_bins.value_counts().sort_index()
+    
+    for category, count in rating_dist.items():
+        percentage = (count / len(ratings) * 100)
+        print(f"   {category}: {count} shows ({percentage:.1f}%)")
+    
+    print("\n" + "="*50)
+    print("5. TEMPORAL ANALYSIS")
+    print("="*50)
+    
+    # Year-wise analysis
+    print("📅 RELEASE YEAR ANALYSIS:")
+    year_stats = df.groupby('Release_Year').agg({
+        'Title': 'count',
+        'IMDb_Rating': ['mean', 'std'],
+        'Production_Budget_Million': 'mean'
+    }).round(2)
+    
+    year_stats.columns = ['Count', 'Avg_Rating', 'Rating_Std', 'Avg_Budget']
+    print(year_stats)
+    
+    # Find best and worst years
+    yearly_ratings = df.groupby('Release_Year')['IMDb_Rating'].mean().dropna()
+    best_year = yearly_ratings.idxmax()
+    worst_year = yearly_ratings.idxmin()
+    
+    print(f"\n🏆 Best Year for Ratings: {best_year} (Avg: {yearly_ratings[best_year]:.2f})")
+    print(f"📉 Lowest Year for Ratings: {worst_year} (Avg: {yearly_ratings[worst_year]:.2f})")
+    
+    print("\n" + "="*50)
+    print("6. GENRE ANALYSIS")
+    print("="*50)
+    
+    # Genre performance
+    genre_stats = df.groupby('Genre').agg({
+        'Title': 'count',
+        'IMDb_Rating': ['mean', 'std', 'min', 'max'],
+        'IMDb_Votes': 'mean',
+        'Production_Budget_Million': 'mean'
+    }).round(2)
+    
+    genre_stats.columns = ['Count', 'Avg_Rating', 'Rating_Std', 'Min_Rating', 'Max_Rating', 'Avg_Votes', 'Avg_Budget']
+    genre_stats = genre_stats.sort_values('Avg_Rating', ascending=False)
+    
+    print("Genre Performance Summary:")
+    print(genre_stats)
+    
+    # Top and bottom genres
+    print(f"\n🥇 Highest Rated Genre: {genre_stats.index[0]} (Avg: {genre_stats.iloc[0]['Avg_Rating']:.2f})")
+    print(f"🔻 Lowest Rated Genre: {genre_stats.index[-1]} (Avg: {genre_stats.iloc[-1]['Avg_Rating']:.2f})")
+    
+    print("\n" + "="*50)
+    print("7. LANGUAGE AND COUNTRY INSIGHTS")
+    print("="*50)
+    
+    # Language analysis
+    print("🌍 LANGUAGE DISTRIBUTION:")
+    lang_stats = df.groupby('Language').agg({
+        'Title': 'count',
+        'IMDb_Rating': 'mean'
+    }).round(2).sort_values('Title', ascending=False)
+    
+    lang_stats.columns = ['Count', 'Avg_Rating']
+    print(lang_stats.head(10))
+    
+    # Country analysis
+    print(f"\n🌏 COUNTRY DISTRIBUTION:")
+    country_stats = df.groupby('Country').agg({
+        'Title': 'count',
+        'IMDb_Rating': 'mean',
+        'Production_Budget_Million': 'mean'
+    }).round(2).sort_values('Title', ascending=False)
+    
+    country_stats.columns = ['Count', 'Avg_Rating', 'Avg_Budget']
+    print(country_stats)
+    
+    print("\n" + "="*50)
+    print("8. PRODUCTION INSIGHTS")
+    print("="*50)
+    
+    # Budget vs Rating analysis
+    budget_rating_corr = df['Production_Budget_Million'].corr(df['IMDb_Rating'])
+    print(f"💰 Budget vs Rating Correlation: {budget_rating_corr:.3f}")
+    
+    # Runtime analysis
+    runtime_stats = df.groupby('Genre')['Runtime_Minutes'].agg(['mean', 'std', 'min', 'max']).round(1)
+    print(f"\n⏱️  RUNTIME BY GENRE:")
+    print(runtime_stats)
+    
+    # Seasons analysis
+    print(f"\n📺 SEASONS ANALYSIS:")
+    seasons_dist = df['Seasons'].value_counts().sort_index()
+    for seasons, count in seasons_dist.items():
+        avg_rating = df[df['Seasons'] == seasons]['IMDb_Rating'].mean()
+        print(f"   {seasons} Season(s): {count} shows (Avg Rating: {avg_rating:.2f})")
+    
+    return {
+        'numerical_summary': summary_stats,
+        'additional_stats': additional_stats,
+        'correlation_matrix': correlation_matrix,
+        'strong_correlations': strong_correlations,
+        'genre_stats': genre_stats,
+        'yearly_stats': year_stats,
+        'language_stats': lang_stats,
+        'country_stats': country_stats
+    }
+
+# Generate comprehensive summary statistics
+print("Starting comprehensive statistical analysis...\n")
+summary_results = generate_summary_statistics(netflix_df)
+
+# Create visualizations for key statistics
+print("\n" + "="*50)
+print("9. STATISTICAL VISUALIZATIONS")
+print("="*50)
+
+plt.figure(figsize=(20, 15))
+
+# Plot 1: Distribution of IMDb Ratings
+plt.subplot(3, 3, 1)
+netflix_df['IMDb_Rating'].dropna().hist(bins=20, alpha=0.7, color='skyblue', edgecolor='black')
+plt.title('Distribution of IMDb Ratings')
+plt.xlabel('Rating')
+plt.ylabel('Frequency')
+
+# Plot 2: Ratings by Genre (Box plot)
+plt.subplot(3, 3, 2)
+sns.boxplot(data=netflix_df, x='Genre', y='IMDb_Rating')
+plt.xticks(rotation=45)
+plt.title('IMDb Ratings by Genre')
+
+# Plot 3: Correlation Heatmap
+plt.subplot(3, 3, 3)
+numerical_cols = netflix_df.select_dtypes(include=[np.number]).columns
+corr_matrix = netflix_df[numerical_cols].corr()
+sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0, fmt='.2f')
+plt.title('Correlation Matrix')
+
+# Plot 4: Ratings by Release Year
+plt.subplot(3, 3, 4)
+yearly_avg = netflix_df.groupby('Release_Year')['IMDb_Rating'].mean()
+yearly_avg.plot(kind='line', marker='o', color='green')
+plt.title('Average Rating by Release Year')
+plt.xlabel('Year')
+plt.ylabel('Average Rating')
+
+# Plot 5: Production Budget vs Rating
+plt.subplot(3, 3, 5)
+plt.scatter(netflix_df['Production_Budget_Million'], netflix_df['IMDb_Rating'], alpha=0.6, color='coral')
+plt.xlabel('Production Budget (Million $)')
+plt.ylabel('IMDb Rating')
+plt.title('Budget vs Rating Relationship')
+
+# Plot 6: Language Distribution
+plt.subplot(3, 3, 6)
+netflix_df['Language'].value_counts().head(8).plot(kind='bar', color='lightgreen')
+plt.title('Content Distribution by Language')
+plt.xticks(rotation=45)
+
+# Plot 7: Runtime Distribution
+plt.subplot(3, 3, 7)
+netflix_df['Runtime_Minutes'].dropna().hist(bins=15, alpha=0.7, color='orange')
+plt.title('Distribution of Runtime')
+plt.xlabel('Runtime (Minutes)')
+plt.ylabel('Frequency')
+
+# Plot 8: Seasons vs Average Rating
+plt.subplot(3, 3, 8)
+seasons_rating = netflix_df.groupby('Seasons')['IMDb_Rating'].mean()
+seasons_rating.plot(kind='bar', color='purple', alpha=0.7)
+plt.title('Average Rating by Number of Seasons')
+plt.xlabel('Number of Seasons')
+plt.ylabel('Average Rating')
+
+# Plot 9: Country Distribution (Top 8)
+plt.subplot(3, 3, 9)
+netflix_df['Country'].value_counts().head(8).plot(kind='pie', autopct='%1.1f%%')
+plt.title('Content Distribution by Country')
+
+plt.tight_layout()
+plt.show()
+
+print("\n" + "="*70)
+print("STEP 3 SUMMARY:")
+print("="*70)
+print("✓ Comprehensive descriptive statistics generated")
+print("✓ Correlation analysis completed")
+print("✓ Categorical variable analysis finished")
+print("✓ Temporal trends identified")
+print("✓ Genre performance analyzed")
+print("✓ Geographic distribution examined")
+print("✓ Production insights extracted")
+print("✓ Statistical visualizations created")
+
+print("\n🎯 KEY STATISTICAL INSIGHTS:")
+print(f"- Average IMDb Rating: {netflix_df['IMDb_Rating'].mean():.2f}")
+print(f"- Most popular genre: {netflix_df['Genre'].mode().iloc[0]}")
+print(f"- Peak release year: {netflix_df['Release_Year'].mode().iloc[0]}")
+print(f"- Average production budget: ${netflix_df['Production_Budget_Million'].mean():.1f}M")
+print(f"- Most common language: {netflix_df['Language'].mode().iloc[0]}")
+
+print("\n✓ Step 3 Complete: Summary statistics and insights generated!")
